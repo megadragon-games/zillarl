@@ -8,7 +8,10 @@
 ########################################################################################################
 
 import libtcodpy as libtcod
-import zillarldata as data
+
+import zillarl_defs as defs
+import zillarl_script as script
+
 import math
 import textwrap
 import shelve 
@@ -23,7 +26,7 @@ import copy
 #the game screen.	
 class Object:
 	#INIT initializes and constructs the object with the given parameters.
-	def __init__(self, x, y, glyph, name, color, desc = data.DESC_DEFAULT, blocks = False, alwaysVisible = False, 
+	def __init__(self, x, y, glyph, name, color, desc = defs.DESC_DEFAULT, blocks = False, alwaysVisible = False, 
 		fighter = None, ai = None, item = None, equipment = None):
 		self.name = name
 		self.blocks = blocks
@@ -67,7 +70,7 @@ class Object:
 		
 	#CLEAR erases this object's glyph.
 	def clear(self):
-		libtcod.console_put_char(con, self.x, self.y, data.gSpace, libtcod.BKGND_NONE)
+		libtcod.console_put_char(con, self.x, self.y, defs.gSpace, libtcod.BKGND_NONE)
 		
 	#MOVE TOWARDS gets a vector and distance from the object to the target, so the object can
 	#move toward the target, as in a pursuit.
@@ -159,8 +162,8 @@ class Fighter:
 			
 			#If the damage-taker is Zilla, and she falls below 13 HP, change her glyph
 			if self.owner == player and self.cond < 13:
-				message(data.tinyWhines[rnd(0, len(data.tinyWhines) - 1)], data.cZilla)
-				player.glyph = data.gZillaShrunk
+				message(defs.tinyWhines[rnd(0, len(defs.tinyWhines) - 1)], defs.cZilla)
+				player.glyph = defs.gZillaShrunk
 			
 			#Check for death. If there is a death function and the fighter's health is zero or lower,
 			#call the death function.
@@ -184,35 +187,21 @@ class Fighter:
 			damage = libtcod.random_get_int(0, self.minDamage, self.maxDamage)
 			
 			if self.owner == player:
-				#if (target.fighter.cond - damage) <= 0:
-					#message("Zilla " + rndFromList(data.bellyImpactNoises)
-					#+ " the " + target.name + " with her belly! The " + target.name
-					#+ " shrinks and disappears in a puff of smoke!", libtcod.purple)
-				#else:
-				message("Zilla " + rndFromList(data.bellyImpactNoises)
-					+ " the " + target.name + " with her belly!", libtcod.purple)
+				message(script.zillaAttacksMonster(target.name), libtcod.purple)
+
 			elif target == player:
-				if damage == 1:
-					message("The " + self.owner.name + " attacks Zilla! She " 
-						+ rndFromList(data.shrinkNoises) + " an inch smaller.", 
-						libtcod.green)
-				else:
-					message("The " + self.owner.name + " attacks Zilla! She " 
-						+ rndFromList(data.shrinkNoises) + " " + str(damage)
-						+ " inches smaller.", libtcod.green)
+				message(script.zillaAttackedByMonster(self.owner.name, damage), libtcod.green)
 					
 			target.fighter.takeDamage(damage)
 		else:
 			if self.owner == player:
-				message("Zilla " + rndFromList(data.bellyImpactNoises)
-					+ " the " + target.name + " with her belly, but "
-					+ rndFromList(data.zillaHarmlessAttackStrings), libtcod.light_crimson)
+				message(script.zillaAttacksButMisses(target.name), libtcod.light_crimson)
 					
 			if target == player:
-				message("The " + self.owner.name + " attacks Zilla, but "
-					+ rndFromList(data.monsterHarmlessAttackStrings), libtcod.light_crimson)
+				message(script.zillaAttackedButMissed(self.owner.name), libtcod.light_crimson)
 			
-			if self.owner != player and target != player: #If neither the attacker nor the target is Zilla
+			if self.owner != player and target != player: 
+				#If neither the attacker nor the target is Zilla, a default message is used.
 				message("The " + self.owner.name + " attacks the " + target.name + " but it has no effect!", libtcod.light_crimson)
 		
 	#HEAL increases a fighter's current hitpoints, but cannot go over the maximum.
@@ -223,7 +212,7 @@ class Fighter:
 			
 		#If the object being healed is Zilla, and she rises above 12 HP, change her sprite
 		if self.owner == player and self.cond > 12:
-			player.glyph = data.gZilla
+			player.glyph = defs.gZilla
 			
 	def recover(self, amount):
 		self.aura += amount
@@ -247,7 +236,7 @@ class BasicMonster:
 
 #The ConfusedMonster AI module is used for a monster afflicted with confusion.
 class ConfusedMonster:
-	def __init__(self, oldAI, numberOfTurns = data.CONFUSE_NUM_TURNS):
+	def __init__(self, oldAI, numberOfTurns = defs.CONFUSE_NUM_TURNS):
 		self.oldAI = oldAI
 		self.numberOfTurns = numberOfTurns
 		
@@ -274,7 +263,7 @@ class Item:
 	#PICKUP removes the item from the map and adds the item to the player's inventory.
 	def pickup(self):
 		#if len(inventory) >= 26:
-		if len(inventory) >= data.INVENTORY_LIMIT:
+		if len(inventory) >= defs.INVENTORY_LIMIT:
 			message("Your inventory is full.", libtcod.dark_yellow)
 		else:
 			inventory.append(self.owner)
@@ -297,29 +286,23 @@ class Item:
 			if self.useEffect() != "cancel":
 				if self.useEffect() == "eat":
 					#This means that the item was food and Zilla successfully ate it
-					addedWeight = self.bloat * (player.fighter.hits / player.fighter.cond)
-					player.weight += addedWeight
-					if addedWeight == 1:
-						message("Zilla " + rndFromList(data.eatVerbs) + " the "
-							+ self.owner.name + " " + rndFromList(data.eatAdverbs)
-							+ " and gains " + str(addedWeight) + " pound.", libtcod.purple)
-					else:
-						message("Zilla " + rndFromList(data.eatVerbs) + " the "
-							+ self.owner.name + " " + rndFromList(data.eatAdverbs)
-							+ " and gains " + str(addedWeight) + " pounds.", libtcod.purple)
+					#addedWeight = self.bloat * (player.fighter.hits / player.fighter.cond)
+					#player.weight += addedWeight
+					player.weight += self.bloat
+					message(script.zillaEats("eat", self.owner.name, self.bloat), libtcod.purple)
+					#if addedWeight == 1:
+					#	message("Zilla " + rndFromList(defs.eatVerbs) + " the "
+					#		+ self.owner.name + " " + rndFromList(defs.eatAdverbs)
+					#		+ " and gains " + str(addedWeight) + " pound.", libtcod.purple)
+					#else:
+					#	message("Zilla " + rndFromList(defs.eatVerbs) + " the "
+					#		+ self.owner.name + " " + rndFromList(defs.eatAdverbs)
+					#		+ " and gains " + str(addedWeight) + " pounds.", libtcod.purple)
 							
 				if self.useEffect() == "drink":
 					#This means that the item was a drink and Zilla successfully drank it
-					addedWeight = self.bloat * (player.fighter.hits / player.fighter.cond)
-					player.weight += addedWeight
-					if addedWeight == 1:
-						message("Zilla " + rndFromList(data.drinkVerbs) + " the "
-							+ self.owner.name + " " + rndFromList(data.eatAdverbs)
-							+ " and gains " + str(addedWeight) + " pound.", libtcod.purple)
-					else:
-						message("Zilla " + rndFromList(data.drinkVerbs) + " the "
-							+ self.owner.name + " " + rndFromList(data.eatAdverbs)
-							+ " and gains " + str(addedWeight) + " pounds.", libtcod.purple)
+					player.weight += self.bloat
+					message(script.zillaEats("drink", self.owner.name, self.bloat), libtcod.purple)
 				#Destroy the item after use, unless it was cancelled.
 				inventory.remove(self.owner) 
 	
@@ -405,7 +388,7 @@ def startNewGame():
 	
 	#Create an object representing the player.
 	fighterComponent = Fighter(hp = 64, aura = 24, atk = 2, dfn = 2, minDamage = 2, maxDamage = 3, xp = 0, deathEffect = playerDeath)
-	player = Object(0, 0, data.gZilla, "Zilla", data.cZilla, desc = data.DESC_ZILLA, blocks = True, fighter = fighterComponent)
+	player = Object(0, 0, defs.gZilla, "Zilla", defs.cZilla, desc = defs.DESC_ZILLA, blocks = True, fighter = fighterComponent)
 	
 	player.level = 1
 	player.weight = 120
@@ -437,9 +420,9 @@ def initializeFOV():
 	libtcod.console_clear(con)
 	
 	#Create the FOV map, according to the generated dungeon map.
-	fovMap = libtcod.map_new(data.MAP_WIDTH, data.MAP_HEIGHT)
-	for y in range(data.MAP_HEIGHT):
-		for x in range(data.MAP_WIDTH):
+	fovMap = libtcod.map_new(defs.MAP_WIDTH, defs.MAP_HEIGHT)
+	for y in range(defs.MAP_HEIGHT):
+		for x in range(defs.MAP_WIDTH):
 			libtcod.map_set_properties(fovMap, x, y, not map[x][y].blockSight, not map[x][y].blocked)
 
 def playGame():
@@ -482,12 +465,12 @@ def mainMenu():
 		libtcod.console_clear(0)
 		
 		#Show the game's title.
-		libtcod.console_set_default_foreground(0, data.cZilla)
-		libtcod.console_print_ex(0, data.SCREEN_WIDTH / 2, data.SCREEN_HEIGHT / 2 - 6, libtcod.BKGND_NONE,
+		libtcod.console_set_default_foreground(0, defs.cZilla)
+		libtcod.console_print_ex(0, defs.SCREEN_WIDTH / 2, defs.SCREEN_HEIGHT / 2 - 6, libtcod.BKGND_NONE,
 			libtcod.CENTER, "BIGGER IS BETTER")
-		libtcod.console_print_ex(0, data.SCREEN_WIDTH / 2, data.SCREEN_HEIGHT / 2 - 5, libtcod.BKGND_NONE,
+		libtcod.console_print_ex(0, defs.SCREEN_WIDTH / 2, defs.SCREEN_HEIGHT / 2 - 5, libtcod.BKGND_NONE,
 			libtcod.CENTER, "the Shapeshifting Roguelike")
-		libtcod.console_print_ex(0, data.SCREEN_WIDTH / 2, data.SCREEN_HEIGHT - 2, libtcod.BKGND_NONE,
+		libtcod.console_print_ex(0, defs.SCREEN_WIDTH / 2, defs.SCREEN_HEIGHT - 2, libtcod.BKGND_NONE,
 			libtcod.CENTER, "2014 Studio Draconis")
 		
 		#Show options and wait for the player's choice.
@@ -665,7 +648,7 @@ def menu(header, options, width):
 	if len(options) > 26: raise ValueError("Cannot have a menu with more than twenty-six options.")
 	
 	#Calculate total height for the header (after auto-wrap) and one line per option.
-	headerHeight = libtcod.console_get_height_rect(con, 0, 0, width, data.SCREEN_HEIGHT, header)
+	headerHeight = libtcod.console_get_height_rect(con, 0, 0, width, defs.SCREEN_HEIGHT, header)
 	if header == "":
 		headerHeight = 0
 	height = len(options) + headerHeight
@@ -691,8 +674,8 @@ def menu(header, options, width):
 		
 	#Blit the contents of window to the root console. The last two parameters passed to console_blit
 	#define the foreground and background transparency, respectively.
-	x = data.SCREEN_WIDTH / 2 - width / 2
-	y = data.SCREEN_HEIGHT / 2 - height / 2
+	x = defs.SCREEN_WIDTH / 2 - width / 2
+	y = defs.SCREEN_HEIGHT / 2 - height / 2
 	libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
 	
 	#Present the root console to the player and wait for a keypress.
@@ -715,8 +698,8 @@ def announce(text, width = 50):
 	
 def itemMenu(activeItem):
 	#Create an off-screen console that represents the item window.
-	width = data.ITEM_WINDOW_WIDTH
-	descHeight = libtcod.console_get_height_rect(con, 0, 0, width, data.SCREEN_HEIGHT, "\n" + activeItem.desc + "\n")
+	width = defs.ITEM_WINDOW_WIDTH
+	descHeight = libtcod.console_get_height_rect(con, 0, 0, width, defs.SCREEN_HEIGHT, "\n" + activeItem.desc + "\n")
 	height = descHeight + 4
 	itemWindow = libtcod.console_new(width, height)
 	
@@ -730,8 +713,8 @@ def itemMenu(activeItem):
 	libtcod.console_print_ex(itemWindow, 1, textY, libtcod.BKGND_NONE, libtcod.LEFT, "(U)se")
 	libtcod.console_print_ex(itemWindow, 1, textY + 1, libtcod.BKGND_NONE, libtcod.LEFT, "(D)rop")
 	
-	x = data.SCREEN_WIDTH / 2 - width / 2
-	y = data.SCREEN_HEIGHT / 2 - height / 2
+	x = defs.SCREEN_WIDTH / 2 - width / 2
+	y = defs.SCREEN_HEIGHT / 2 - height / 2
 	libtcod.console_blit(itemWindow, 0, 0, width, height, 0, x, y, 0.9, 0.7)
 	
 	#Present the root console to the player and wait for a keypress.
@@ -762,7 +745,7 @@ def inventoryMenu(header):
 				text = text + " (Equipped)"
 			options.append(text)
 		
-	index = menu(header, options, data.INVENTORY_WIDTH)
+	index = menu(header, options, defs.INVENTORY_WIDTH)
 	
 	#If an item was chosen, return it.
 	if index is None or len(inventory) == 0: 
@@ -772,11 +755,11 @@ def inventoryMenu(header):
 #This function displays messages in the message log on the status bar.
 def message(newMessage, color = libtcod.white):
 	#Split the message if necessary, among multiple lines. This uses Python's textwrap module.
-	newMessageLines = textwrap.wrap(newMessage, data.MESSAGE_WIDTH)
+	newMessageLines = textwrap.wrap(newMessage, defs.MESSAGE_WIDTH)
 	
 	for line in newMessageLines:
 		#If the buffer is full, remove the first line to make room for the new one.
-		if len(messageLog) == data.MESSAGE_HEIGHT:
+		if len(messageLog) == defs.MESSAGE_HEIGHT:
 			del messageLog[0]
 		
 		#Add the new line as a tuple, with the text and the color.
@@ -802,51 +785,22 @@ def showObjectInfoPanel():
 		infopanelY = 2
 		libtcod.console_set_default_background(infoPanel, libtcod.black)
 		libtcod.console_clear(infoPanel)
-		libtcod.console_print_frame(infoPanel, 0, 0, data.INFO_PANEL_WIDTH, data.MAP_HEIGHT, False, libtcod.BKGND_SET)
+		libtcod.console_print_frame(infoPanel, 0, 0, defs.INFO_PANEL_WIDTH, defs.MAP_HEIGHT, False, libtcod.BKGND_SET)
 		
 		for obj in objectsAtMouse:
 			libtcod.console_set_default_foreground(infoPanel, libtcod.cyan)
-			libtcod.console_print_ex(infoPanel, data.INFO_PANEL_WIDTH / 2, infopanelY, libtcod.BKGND_NONE, libtcod.CENTER, obj.name)
+			libtcod.console_print_ex(infoPanel, defs.INFO_PANEL_WIDTH / 2, infopanelY, libtcod.BKGND_NONE, libtcod.CENTER, obj.name)
 			infopanelY += 2
 			libtcod.console_set_default_foreground(infoPanel, libtcod.white)
-			descHeight = libtcod.console_get_height_rect(con, 0, 0, data.INFO_PANEL_WIDTH - 2, data.SCREEN_HEIGHT, obj.desc)
-			libtcod.console_print_rect_ex(infoPanel, 2, infopanelY, data.INFO_PANEL_WIDTH - 2, descHeight, libtcod.BKGND_NONE, libtcod.LEFT, obj.desc)
+			descHeight = libtcod.console_get_height_rect(con, 0, 0, defs.INFO_PANEL_WIDTH - 4, defs.SCREEN_HEIGHT, obj.desc)
+			libtcod.console_print_rect_ex(infoPanel, 2, infopanelY, defs.INFO_PANEL_WIDTH - 4, descHeight, libtcod.BKGND_NONE, libtcod.LEFT, obj.desc)
 			infopanelY += descHeight + 1
 			if obj != player and obj.fighter:
-				renderStatusBar(infoPanel, 2, infopanelY, data.INFO_PANEL_WIDTH - 4, "Health", obj.fighter.cond, obj.fighter.hits, 
+				renderStatusBar(infoPanel, 2, infopanelY, defs.INFO_PANEL_WIDTH - 4, "Health", obj.fighter.cond, obj.fighter.hits, 
 					libtcod.red, libtcod.darkest_red, "standard")
 				infopanelY += 2
-		
-#		for obj in objectsAtMouse:
-#			if obj == player:
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.cyan)
-#				libtcod.console_print_ex(infoPanel, data.INFO_PANEL_WIDTH / 2, infopanelY, libtcod.BKGND_NONE, libtcod.CENTER, "-ZILLA-")
-#				infopanelY += 2
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.white)
-#				libtcod.console_print_ex(infoPanel, 2, infopanelY, libtcod.BKGND_NONE, libtcod.LEFT, obj.desc)
-#				
-#			elif obj != player and obj.fighter:
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.cyan)
-#				libtcod.console_print_ex(infoPanel, data.INFO_PANEL_WIDTH / 2, infopanelY, libtcod.BKGND_NONE, libtcod.CENTER, "-CREATURE-")
-#				infopanelY += 2
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.white)
-#				libtcod.console_print_ex(infoPanel, 2, infopanelY, libtcod.BKGND_NONE, libtcod.LEFT, obj.desc)
-#				
-#			elif obj.item:
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.cyan)
-#				libtcod.console_print_ex(infoPanel, data.INFO_PANEL_WIDTH / 2, infopanelY, libtcod.BKGND_NONE, libtcod.CENTER, "-ITEM-")
-#				infopanelY += 2
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.white)
-#				libtcod.console_print_ex(infoPanel, 2, infopanelY, libtcod.BKGND_NONE, libtcod.LEFT, obj.desc)
-#				
-#			elif obj != player and obj.fighter is None and obj.item is None:
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.cyan)
-#				libtcod.console_print_ex(infoPanel, data.INFO_PANEL_WIDTH / 2, infopanelY, libtcod.BKGND_NONE, libtcod.CENTER, "-FEATURE-")
-#				infopanelY += 2
-#				libtcod.console_set_default_foreground(infoPanel, libtcod.white)
-#				libtcod.console_print_ex(infoPanel, 2, infopanelY, libtcod.BKGND_NONE, libtcod.LEFT, obj.desc)
-#
-		libtcod.console_blit(infoPanel, 0, 0, 0, 0, 0, data.MAP_WIDTH / 2, 0, 0.9, 0.7)
+				
+		libtcod.console_blit(infoPanel, 0, 0, 0, 0, 0, defs.MAP_WIDTH / 2, 0, 0.9, 0.7)
 	
 #This function renders a generic status bar, used for a health bar, a mana bar, experience bar, etc.
 def renderStatusBar(targetConsole, x, y, totalWidth, name, value, maximum, barColor, backColor, barType = "standard"):
@@ -895,11 +849,11 @@ def renderAll():
 	if fovNeedsToBeRecomputed:
 		#If this is true, then we must recalculate the field of view and render the map.
 		fovNeedsToBeRecomputed = False
-		libtcod.map_compute_fov(fovMap, player.x, player.y, data.TORCH_RADIUS, data.FOV_LIGHT_WALLS, data.FOV_ALGO)
+		libtcod.map_compute_fov(fovMap, player.x, player.y, defs.TORCH_RADIUS, defs.FOV_LIGHT_WALLS, defs.FOV_ALGO)
 		
 		#Iterate through the list of map tiles and set their background colors.
-		for y in range(data.MAP_HEIGHT):
-			for x in range(data.MAP_WIDTH):
+		for y in range(defs.MAP_HEIGHT):
+			for x in range(defs.MAP_WIDTH):
 				visible = libtcod.map_is_in_fov(fovMap, x, y)
 				wall = map[x][y].blockSight
 				if not visible:
@@ -907,15 +861,15 @@ def renderAll():
 					if map[x][y].explored:
 						#...it will only be drawn if the player has explored it
 						if wall:
-							libtcod.console_set_char_background(con, x, y, data.cDarkWall, libtcod.BKGND_SET)
+							libtcod.console_set_char_background(con, x, y, defs.cDarkWall, libtcod.BKGND_SET)
 						else:
-							libtcod.console_set_char_background(con, x, y, data.cDarkGround, libtcod.BKGND_SET)
+							libtcod.console_set_char_background(con, x, y, defs.cDarkGround, libtcod.BKGND_SET)
 				else:
 					#If a tile is in the player's field of view...
 					if wall:
-						libtcod.console_set_char_background(con, x, y, data.cLitWall, libtcod.BKGND_SET)
+						libtcod.console_set_char_background(con, x, y, defs.cLitWall, libtcod.BKGND_SET)
 					else:
-						libtcod.console_set_char_background(con, x, y, data.cLitGround, libtcod.BKGND_SET)
+						libtcod.console_set_char_background(con, x, y, defs.cLitGround, libtcod.BKGND_SET)
 					map[x][y].explored = True
 	
 	#Draw all objects in the list, except the player, which needs to be drawn last.
@@ -925,13 +879,13 @@ def renderAll():
 	player.draw()
 		
 	#Blit the contents of con to the root console.
-	libtcod.console_blit(con, 0, 0, data.MAP_WIDTH, data.MAP_HEIGHT, 0, 0, 0)
+	libtcod.console_blit(con, 0, 0, defs.MAP_WIDTH, defs.MAP_HEIGHT, 0, 0, 0)
 	
 	#Prepare to render the status panel.
 	libtcod.console_set_default_background(msgPanel, libtcod.black)
 	libtcod.console_clear(msgPanel)
 	libtcod.console_set_default_foreground(msgPanel, libtcod.white)
-	libtcod.console_print_frame(msgPanel, 0, 0, data.MESSAGE_PANEL_WIDTH, data.MESSAGE_PANEL_HEIGHT, False, libtcod.BKGND_NONE, "BIGGER IS BETTER")
+	libtcod.console_print_frame(msgPanel, 0, 0, defs.MESSAGE_PANEL_WIDTH, defs.MESSAGE_PANEL_HEIGHT, False, libtcod.BKGND_NONE, "BIGGER IS BETTER")
 	
 	#Print the message log, one line at a time.
 	y = 1
@@ -945,10 +899,10 @@ def renderAll():
 	libtcod.console_clear(sidebar)
 	#libtcod.console_rect(sidebar, 0, 0, data.SIDE_WIDTH, data.SIDE_HEIGHT, False, libtcod.BKGND_SET)
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
-	libtcod.console_print_frame(sidebar, 0, 0, data.SIDEBAR_WIDTH, data.SIDEBAR_HEIGHT, False, libtcod.BKGND_SET)
+	libtcod.console_print_frame(sidebar, 0, 0, defs.SIDEBAR_WIDTH, defs.SIDEBAR_HEIGHT, False, libtcod.BKGND_SET)
 	
 	libtcod.console_set_color_control(libtcod.COLCTRL_1, libtcod.green, libtcod.darkest_flame)
-	xpToAdvance = data.ADVANCE_BASE + player.level * data.ADVANCE_FACTOR
+	xpToAdvance = defs.ADVANCE_BASE + player.level * defs.ADVANCE_FACTOR
 	equippedArmor = getEquippedInSlot("bikini")
 	equippedArmorName = ""
 	if equippedArmor is not None:
@@ -956,73 +910,73 @@ def renderAll():
 		
 	sidebarY = 2
 	libtcod.console_set_default_foreground(sidebar, libtcod.cyan)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH / 2, sidebarY, libtcod.BKGND_NONE, libtcod.CENTER, "-VITALS-")
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH / 2, sidebarY, libtcod.BKGND_NONE, libtcod.CENTER, "-VITALS-")
 	
 	sidebarY += 2
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Size")
-	renderStatusBar(sidebar, 2, sidebarY + 1, data.BAR_WIDTH, "Health", player.fighter.cond, player.fighter.hits, 
+	renderStatusBar(sidebar, 2, sidebarY + 1, defs.BAR_WIDTH, "Health", player.fighter.cond, player.fighter.hits, 
 		libtcod.red, libtcod.darkest_red, "size")
 		
 	sidebarY += 3
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Gurgle")
-	renderStatusBar(sidebar, 2, sidebarY + 1, data.BAR_WIDTH, "Gurgle", player.fighter.aura, player.fighter.sppt, 
+	renderStatusBar(sidebar, 2, sidebarY + 1, defs.BAR_WIDTH, "Gurgle", player.fighter.aura, player.fighter.sppt, 
 		libtcod.blue, libtcod.darkest_blue, "no-name")
 		
 	sidebarY += 3
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Weight")
-	renderStatusBar(sidebar, 2, sidebarY + 1, data.BAR_WIDTH, "Weight", player.weight, player.weight, 
+	renderStatusBar(sidebar, 2, sidebarY + 1, defs.BAR_WIDTH, "Weight", player.weight, player.weight, 
 		libtcod.purple, libtcod.darkest_purple, "weight")
 		
 	sidebarY += 3
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Mutation")
 	libtcod.console_set_default_foreground(sidebar, libtcod.green)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH - 3, sidebarY, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.level))
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH - 3, sidebarY, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.level))
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
-	renderStatusBar(sidebar, 2, sidebarY + 1, data.BAR_WIDTH, "Mutation", player.fighter.xp, xpToAdvance, 
+	renderStatusBar(sidebar, 2, sidebarY + 1, defs.BAR_WIDTH, "Mutation", player.fighter.xp, xpToAdvance, 
 		libtcod.green, libtcod.darkest_green, "no-name")
 	
 	sidebarY += 4
 	libtcod.console_set_default_foreground(sidebar, libtcod.cyan)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH / 2, sidebarY, libtcod.BKGND_NONE, libtcod.CENTER, "-STATS-")
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH / 2, sidebarY, libtcod.BKGND_NONE, libtcod.CENTER, "-STATS-")
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
 	
 	sidebarY += 2
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Attack")
 	libtcod.console_set_default_foreground(sidebar, libtcod.green)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.fighter.atk))
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.fighter.atk))
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
 	
 	sidebarY += 3
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Defense")
 	libtcod.console_set_default_foreground(sidebar, libtcod.green)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.fighter.dfn))
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.fighter.dfn))
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
 	
 	sidebarY += 3
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Damage")
 	libtcod.console_set_default_foreground(sidebar, libtcod.green)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.fighter.minDamage) + " to " + str(player.fighter.maxDamage))
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(player.fighter.minDamage) + " to " + str(player.fighter.maxDamage))
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
 	
 	sidebarY += 3
 	libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, "Laboratory Level")
 	libtcod.console_set_default_foreground(sidebar, libtcod.green)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(dungeonLevel))
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH - 3, sidebarY + 1, libtcod.BKGND_NONE, libtcod.RIGHT, str(dungeonLevel))
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
 	
 	sidebarY += 4
 	libtcod.console_set_default_foreground(sidebar, libtcod.cyan)
-	libtcod.console_print_ex(sidebar, data.SIDEBAR_WIDTH / 2, sidebarY, libtcod.BKGND_NONE, libtcod.CENTER, "-INVENTORY-")
+	libtcod.console_print_ex(sidebar, defs.SIDEBAR_WIDTH / 2, sidebarY, libtcod.BKGND_NONE, libtcod.CENTER, "-INVENTORY-")
 	libtcod.console_set_default_foreground(sidebar, libtcod.white)
 	
 	sidebarY += 2
-	for x in range(data.INVENTORY_LIMIT):
+	for x in range(defs.INVENTORY_LIMIT):
 		libtcod.console_set_default_foreground(sidebar, libtcod.yellow)
 		libtcod.console_print_ex(sidebar, 2, sidebarY, libtcod.BKGND_NONE, libtcod.LEFT, str(x + 1))
 		sidebarY += 1
 	
-	sidebarY -= data.INVENTORY_LIMIT
+	sidebarY -= defs.INVENTORY_LIMIT
 	for i in range(len(inventory)):
 		text = inventory[i].name
 		
@@ -1038,8 +992,8 @@ def renderAll():
 	showObjectInfoPanel()
 	
 	#Blit the contents of panel to the root console.
-	libtcod.console_blit(sidebar, 0, 0, 0, 0, 0, data.MAP_WIDTH, 0)
-	libtcod.console_blit(msgPanel, 0, 0, data.SCREEN_WIDTH, data.MESSAGE_PANEL_HEIGHT, 0, 0, data.MESSAGE_PANEL_Y)
+	libtcod.console_blit(sidebar, 0, 0, 0, 0, 0, defs.MAP_WIDTH, 0)
+	libtcod.console_blit(msgPanel, 0, 0, defs.SCREEN_WIDTH, defs.MESSAGE_PANEL_HEIGHT, 0, 0, defs.MESSAGE_PANEL_Y)
 		
 #########################################################################################################
 # [ACTOR DEATH FUNCTIONS]                                                                               #
@@ -1049,7 +1003,7 @@ def playerDeath(player):
 	#When Zilla is defeated, the game ends.
 	global gameState
 	
-	player.glyph = data.gSpace
+	player.glyph = defs.gSpace
 	
 	message("Zilla shrinks uncontrollably down to a microscopic size!", libtcod.darker_green)
 	message("Oh well... you win some, you lose some. When's my next meal? I'm starving!", libtcod.sepia)
@@ -1076,7 +1030,7 @@ def genericDrink():
 #This function heals Zilla.
 def growPotion():
 	if player.fighter.cond == player.fighter.hits:
-		message("I'm already at full size. This potion won't make me any bigger.", data.cZilla)
+		message("I'm already at full size. This potion won't make me any bigger.", defs.cZilla)
 		return "cancel"
 	
 	message("Zilla drinks the potion and grows bigger!", libtcod.red)
@@ -1085,20 +1039,20 @@ def growPotion():
 #This function controls the lightning bolt spell. It finds the closest enemy within a maximum range and
 #damages it.
 def castLightning():
-	monster = closestMonster(data.LIGHTNING_RANGE)
+	monster = closestMonster(defs.LIGHTNING_RANGE)
 	if monster is None:
 		message("No enemy is close enough to strike.", libtcod.red)
 		return "cancel"
 	
 	message("You unfurl the scroll, and lightning erupts from it! The bolt strikes the " 
-		+ monster.name + " for " + str(data.LIGHTNING_DAMAGE) + " points of damage.", libtcod.light_blue)
-	monster.fighter.takeDamage(data.LIGHTNING_DAMAGE)
+		+ monster.name + " for " + str(defs.LIGHTNING_DAMAGE) + " points of damage.", libtcod.light_blue)
+	monster.fighter.takeDamage(defs.LIGHTNING_DAMAGE)
 
 #This function asks the player for a target monster and then confuses it, disrupting its AI.
 def castConfuse():
 	#Ask the player for a target to confuse.
 	message("Left-click an enemy to confuse it, or right-click to cancel.", libtcod.light_cyan)
-	monster = targetMonster(data.CONFUSE_RANGE)
+	monster = targetMonster(defs.CONFUSE_RANGE)
 	if monster is None:
 		return "cancel"
 	
@@ -1114,9 +1068,9 @@ def castAreaShrink():
 	(x,y) = (player.x, player.y)
 	
 	for obj in objects:
-		if obj.distance(x, y) <= data.SHRINK_CHANT_RADIUS and obj.fighter:
-			message("The " + obj.name + " " + rndFromList(data.shrinkVerbs) + "!", libtcod.purple)
-			damageAmount = rnd(data.SHRINK_CHANT_MIN_DAMAGE, data.SHRINK_CHANT_MAX_DAMAGE)
+		if obj.distance(x, y) <= defs.SHRINK_CHANT_RADIUS and obj.fighter:
+			message("The " + obj.name + " " + rndFromList(defs.shrinkVerbs) + "!", libtcod.purple)
+			damageAmount = rnd(defs.SHRINK_CHANT_MIN_DAMAGE, defs.SHRINK_CHANT_MAX_DAMAGE)
 			damageAmount = damageAmount * player.level
 			obj.fighter.takeDamage(damageAmount)
 
@@ -1127,14 +1081,14 @@ def castFireball():
 	if x is None: 
 		return "cancel"
 	
-	message("The fireball explodes, burning everything within " + str(data.FIREBALL_RADIUS) + " tiles.", 
+	message("The fireball explodes, burning everything within " + str(defs.FIREBALL_RADIUS) + " tiles.", 
 		libtcod.orange)
 	
 	for obj in objects:
-		if obj.distance(x, y) <= data.FIREBALL_RADIUS and obj.fighter:
-			message("The " + obj.name + " is burned for " + str(data.FIREBALL_DAMAGE) + 
+		if obj.distance(x, y) <= defs.FIREBALL_RADIUS and obj.fighter:
+			message("The " + obj.name + " is burned for " + str(defs.FIREBALL_DAMAGE) + 
 				" points of fire damage.", libtcod.orange)
-			obj.fighter.takeDamage(data.FIREBALL_DAMAGE)
+			obj.fighter.takeDamage(defs.FIREBALL_DAMAGE)
 
 #########################################################################################################
 # [MONSTER TEMPLATES]                                                                                   #
@@ -1142,45 +1096,45 @@ def castFireball():
 # the declared functions.                                                                               #
 #########################################################################################################
 
-M_NEWT = Object(0, 0, data.gLizard, "Newt", libtcod.blue, desc = data.DESC_NEWT, blocks = True,
+M_NEWT = Object(0, 0, defs.gLizard, "Newt", libtcod.blue, desc = defs.DESC_NEWT, blocks = True,
 	fighter = Fighter(hp = 8, aura = 0, atk = 1, dfn = 1, minDamage = 1, maxDamage = 1, xp = 20, deathEffect = monsterDeath),
 	ai = BasicMonster())
 	
-M_GECKO = Object(0, 0, data.gLizard, "Gecko", libtcod.chartreuse, desc = data.DESC_GECKO, blocks = True,
+M_GECKO = Object(0, 0, defs.gLizard, "Gecko", libtcod.chartreuse, desc = defs.DESC_GECKO, blocks = True,
 	fighter = Fighter(hp = 8, aura = 0, atk = 1, dfn = 2, minDamage = 1, maxDamage = 1, xp = 25, deathEffect = monsterDeath),
 	ai = BasicMonster())
 	
-M_LIZARD = Object(0, 0, data.gLizard, "Lizard", libtcod.green, desc = data.DESC_LIZARD, blocks = True, 
+M_LIZARD = Object(0, 0, defs.gLizard, "Lizard", libtcod.green, desc = defs.DESC_LIZARD, blocks = True, 
 	fighter = Fighter(hp = 12, aura = 0, atk = 2, dfn = 1, minDamage = 1, maxDamage = 2, xp = 25, deathEffect = monsterDeath), 
 	ai = BasicMonster())
 
-M_BELLYIMP = Object(0, 0, data.gBellything, "Bellyimp", libtcod.purple, desc = data.DESC_BELLYIMP, blocks = True,
+M_BELLYIMP = Object(0, 0, defs.gBellything, "Bellyimp", libtcod.purple, desc = defs.DESC_BELLYIMP, blocks = True,
 	fighter = Fighter(hp = 10, aura = 0, atk = 3, dfn = 1, minDamage = 2, maxDamage = 4, xp = 50, deathEffect = monsterDeath),  
 	ai = BasicMonster())
 
-M_SNAKE = Object(0, 0, data.gSnake, "Snake", libtcod.black, desc = data.DESC_SNAKE, blocks = True,
+M_SNAKE = Object(0, 0, defs.gSnake, "Snake", libtcod.black, desc = defs.DESC_SNAKE, blocks = True,
 	fighter = Fighter(hp = 8, aura = 0, atk = 2, dfn = 1, minDamage = 2, maxDamage = 2, xp = 30, deathEffect = monsterDeath),  
 	ai = BasicMonster())
 	
 tierZeroMonsters = [M_NEWT, M_GECKO, M_LIZARD, M_BELLYIMP, M_SNAKE]
 
-M_BELLYDEMON = Object(0, 0, data.gBellything, "Bellydemon", libtcod.violet, blocks = True,
+M_BELLYDEMON = Object(0, 0, defs.gBellything, "Bellydemon", libtcod.violet, blocks = True,
 	fighter = Fighter(hp = 40, aura = 0, atk = 4, dfn = 3, minDamage = 3, maxDamage = 4, xp = 200, deathEffect = monsterDeath),  
 	ai = BasicMonster())
 
-M_DIRE_CHARR = Object(0, 0, data.gCharr, "Dire Charr", libtcod.orange, blocks = True,
+M_DIRE_CHARR = Object(0, 0, defs.gCharr, "Dire Charr", libtcod.orange, blocks = True,
 	fighter = Fighter(hp = 18, aura = 0, atk = 4, dfn = 2, minDamage = 2, maxDamage = 4, xp = 160, deathEffect = monsterDeath),  
 	ai = BasicMonster())
 	
-M_ALLIGATOR = Object(0, 0, data.gCrocodilian, "Alligator", libtcod.green, blocks = True,
+M_ALLIGATOR = Object(0, 0, defs.gCrocodilian, "Alligator", libtcod.green, blocks = True,
 	fighter = Fighter(hp = 22, aura = 0, atk = 3, dfn = 3, minDamage = 2, maxDamage = 6, xp = 180, deathEffect = monsterDeath),  
 	ai = BasicMonster())
 				
-M_KANGAROO = Object(0, 0, data.gMarsupial, "Kangaroo", libtcod.darker_sepia, blocks = True,
+M_KANGAROO = Object(0, 0, defs.gMarsupial, "Kangaroo", libtcod.darker_sepia, blocks = True,
 	fighter = Fighter(hp = 16, aura = 0, atk = 2, dfn = 2, minDamage = 2, maxDamage = 4, xp = 120, deathEffect = monsterDeath),  
 	ai = BasicMonster())
 				
-M_CROCODILE = Object(0, 0, data.gCrocodilian, "Crocodile", libtcod.darker_green, blocks = True,
+M_CROCODILE = Object(0, 0, defs.gCrocodilian, "Crocodile", libtcod.darker_green, blocks = True,
 	fighter = Fighter(hp = 22, aura = 0, atk = 3, dfn = 3, minDamage = 2, maxDamage = 6, xp = 180, deathEffect = monsterDeath),  
 	ai = BasicMonster())
 
@@ -1192,59 +1146,59 @@ tierOneMonsters = [M_BELLYDEMON, M_DIRE_CHARR, M_ALLIGATOR, M_KANGAROO, M_CROCOD
 # the declared functions.                                                                               #
 #########################################################################################################			
 #Hamburger, Chicken, Pasta, Cake, Bread, Shrinkberry, Growberry, Toxic waste, Ice cream
-I_BANANA = Object(0, 0, data.gFood, "Banana", libtcod.yellow, desc = data.DESC_BANANA, alwaysVisible = True,
-	item = Item(bloat = data.B_FRUIT, useEffect = genericEat))
+I_BANANA = Object(0, 0, defs.gFood, "Banana", libtcod.yellow, desc = defs.DESC_BANANA, alwaysVisible = True,
+	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
 
-I_APPLE = Object(0, 0, data.gFood, "Apple", libtcod.red, desc = data.DESC_APPLE, alwaysVisible = True,
-	item = Item(bloat = data.B_FRUIT, useEffect = genericEat))
+I_APPLE = Object(0, 0, defs.gFood, "Apple", libtcod.red, desc = defs.DESC_APPLE, alwaysVisible = True,
+	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
 	
-I_PEAR = Object(0, 0, data.gFood, "Pear", libtcod.light_green, desc = data.DESC_PEAR, alwaysVisible = True,
-	item = Item(bloat = data.B_FRUIT, useEffect = genericEat))
+I_PEAR = Object(0, 0, defs.gFood, "Pear", libtcod.light_green, desc = defs.DESC_PEAR, alwaysVisible = True,
+	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
 	
-I_ORANGE = Object(0, 0, data.gFood, "Orange", libtcod.orange, desc = data.DESC_ORANGE, alwaysVisible = True,
-	item = Item(bloat = data.B_FRUIT, useEffect = genericEat))
+I_ORANGE = Object(0, 0, defs.gFood, "Orange", libtcod.orange, desc = defs.DESC_ORANGE, alwaysVisible = True,
+	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
 	
-I_MANGO = Object(0, 0, data.gFood, "Mango", libtcod.dark_orange, desc = data.DESC_MANGO, alwaysVisible = True,
-	item = Item(bloat = data.B_FRUIT, useEffect = genericEat))
+I_MANGO = Object(0, 0, defs.gFood, "Mango", libtcod.dark_orange, desc = defs.DESC_MANGO, alwaysVisible = True,
+	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
 
-I_JUG_MILK = Object(0, 0, data.gFood, "Jug of Milk", libtcod.white, desc = data.DESC_JUG_MILK, alwaysVisible = True,
-	item = Item(bloat = data.B_GALLON, useEffect = genericDrink))
+I_JUG_MILK = Object(0, 0, defs.gFood, "Jug of Milk", libtcod.white, desc = defs.DESC_JUG_MILK, alwaysVisible = True,
+	item = Item(bloat = defs.B_GALLON, useEffect = genericDrink))
 
-I_JUG_APPLEJUICE = Object(0, 0, data.gFood, "Jug of Apple Juice", libtcod.light_yellow, desc = data.DESC_JUG_APPLEJUICE, alwaysVisible = True,
-	item = Item(bloat = data.B_GALLON, useEffect = genericDrink))
+I_JUG_APPLEJUICE = Object(0, 0, defs.gFood, "Jug of Apple Juice", libtcod.light_yellow, desc = defs.DESC_JUG_APPLEJUICE, alwaysVisible = True,
+	item = Item(bloat = defs.B_GALLON, useEffect = genericDrink))
 
-I_JUG_ORANGEJUICE = Object(0, 0, data.gFood, "Jug of Orange Juice", libtcod.orange, desc = data.DESC_JUG_ORANGEJUICE, alwaysVisible = True,
-	item = Item(bloat = data.B_GALLON, useEffect = genericDrink))	
+I_JUG_ORANGEJUICE = Object(0, 0, defs.gFood, "Jug of Orange Juice", libtcod.orange, desc = defs.DESC_JUG_ORANGEJUICE, alwaysVisible = True,
+	item = Item(bloat = defs.B_GALLON, useEffect = genericDrink))	
 
-I_BLOATBERRY = Object(0, 0, data.gFood, "Bloatberry", libtcod.purple, desc = data.DESC_BLOATBERRY, alwaysVisible = True,
-	item = Item(bloat = data.B_BLOATBERRY, useEffect = genericEat))
+I_BLOATBERRY = Object(0, 0, defs.gFood, "Bloatberry", libtcod.purple, desc = defs.DESC_BLOATBERRY, alwaysVisible = True,
+	item = Item(bloat = defs.B_BLOATBERRY, useEffect = genericEat))
 	
-I_KEG_COLA = Object(0, 0, data.gBarrel, "Keg of Cola", libtcod.black, desc = data.DESC_KEG_COLA, alwaysVisible = True,
-	item = Item(bloat = data.B_KEG, useEffect = genericDrink))
+I_KEG_COLA = Object(0, 0, defs.gBarrel, "Keg of Cola", libtcod.black, desc = defs.DESC_KEG_COLA, alwaysVisible = True,
+	item = Item(bloat = defs.B_KEG, useEffect = genericDrink))
 	
-I_BARREL_COLA = Object(0, 0, data.gBarrel, "Barrel of Cola", libtcod.darkest_sepia, desc = data.DESC_BARREL_COLA, alwaysVisible = True,
-	item = Item(bloat = data.B_BARREL, useEffect = genericDrink))
+I_BARREL_COLA = Object(0, 0, defs.gBarrel, "Barrel of Cola", libtcod.darkest_sepia, desc = defs.DESC_BARREL_COLA, alwaysVisible = True,
+	item = Item(bloat = defs.B_BARREL, useEffect = genericDrink))
 	
 food = [I_BANANA, I_APPLE, I_PEAR, I_ORANGE, I_MANGO, I_JUG_MILK, I_JUG_APPLEJUICE, I_JUG_ORANGEJUICE,
 	I_BLOATBERRY, I_KEG_COLA, I_BARREL_COLA]
 
-I_POTION_MINORGROWTH = Object(0, 0, data.gPotion, "Potion of Minor Growth", libtcod.red, desc = data.DESC_POTION_MINORGROWTH, alwaysVisible = True,
+I_POTION_MINORGROWTH = Object(0, 0, defs.gPotion, "Potion of Minor Growth", libtcod.red, desc = defs.DESC_POTION_MINORGROWTH, alwaysVisible = True,
 	item = Item(useEffect = growPotion))
 
 potions = [I_POTION_MINORGROWTH]
 	
 #The Shifter Skivvies are Zilla's starting outfit and do not have equipment bonuses nor is it generated
 #randomly.
-I_SHIFTER_SKIVVIES = Object(0, 0, data.gArmor, "Shifter Skivvies", libtcod.purple, desc = data.DESC_SHIFTER_SKIVVIES, alwaysVisible = True,
+I_SHIFTER_SKIVVIES = Object(0, 0, defs.gArmor, "Shifter Skivvies", libtcod.purple, desc = defs.DESC_SHIFTER_SKIVVIES, alwaysVisible = True,
 	equipment = Equipment(slot = "bikini"))
 	
-I_FLORAL_BIKINI = Object(0, 0, data.gArmor, "Floral Bikini", libtcod.pink, desc = data.DESC_FLORAL_BIKINI, alwaysVisible = True,
+I_FLORAL_BIKINI = Object(0, 0, defs.gArmor, "Floral Bikini", libtcod.pink, desc = defs.DESC_FLORAL_BIKINI, alwaysVisible = True,
 	equipment = Equipment(slot = "bikini", dfnBonus = 1))
 	
-I_BRAWLER_BIKINI = Object(0, 0, data.gArmor, "Brawler Bikini", libtcod.red, desc = data.DESC_BRAWLER_BIKINI, alwaysVisible = True,
+I_BRAWLER_BIKINI = Object(0, 0, defs.gArmor, "Brawler Bikini", libtcod.red, desc = defs.DESC_BRAWLER_BIKINI, alwaysVisible = True,
 	equipment = Equipment(slot = "bikini", atkBonus = 2))
 	
-I_CHAINMAIL_BIKINI = Object(0, 0, data.gArmor, "Chainmail Bikini", libtcod.dark_gray, desc = data.DESC_CHAINMAIL_BIKINI, alwaysVisible = True,
+I_CHAINMAIL_BIKINI = Object(0, 0, defs.gArmor, "Chainmail Bikini", libtcod.dark_gray, desc = defs.DESC_CHAINMAIL_BIKINI, alwaysVisible = True,
 	equipment = Equipment(slot = "bikini", dfnBonus = 3))
 	
 armors = [I_FLORAL_BIKINI, I_BRAWLER_BIKINI, I_CHAINMAIL_BIKINI]
@@ -1307,20 +1261,20 @@ def makeMap():
 	#and then refer to that variable here, all elements in this list would point to that same variable.
 	#Calling the constructor ensures that all of these Tiles are distinct instances.
 	map = [[ Tile(True)
-		for y in range(data.MAP_HEIGHT) ]
-			for x in range(data.MAP_WIDTH) ]
+		for y in range(defs.MAP_HEIGHT) ]
+			for x in range(defs.MAP_WIDTH) ]
 	
 	rooms = []
 	numberOfRooms = 0
 	
-	for r in range(data.MAX_ROOMS):
+	for r in range(defs.MAX_ROOMS):
 		#Random width and height.
-		width = libtcod.random_get_int(0, data.ROOM_MIN_SIZE, data.ROOM_MAX_SIZE)
-		height = libtcod.random_get_int(0, data.ROOM_MIN_SIZE, data.ROOM_MAX_SIZE)
+		width = libtcod.random_get_int(0, defs.ROOM_MIN_SIZE, defs.ROOM_MAX_SIZE)
+		height = libtcod.random_get_int(0, defs.ROOM_MIN_SIZE, defs.ROOM_MAX_SIZE)
 		
 		#Random position, without going out of the boundaries of the map
-		x = libtcod.random_get_int(0, 0, data.MAP_WIDTH - width - 1)
-		y = libtcod.random_get_int(0, 0, data.MAP_HEIGHT - height - 1)
+		x = libtcod.random_get_int(0, 0, defs.MAP_WIDTH - width - 1)
+		y = libtcod.random_get_int(0, 0, defs.MAP_HEIGHT - height - 1)
 		
 		newRoom = Rectangle(x, y, width, height)
 		
@@ -1376,7 +1330,7 @@ def makeMap():
 			numberOfRooms += 1
 		
 	#Create stairs down at the center of the last room.
-	stairsDown = Object(newX, newY, data.gStairsDown, "Elevator Down", libtcod.white, desc = data.DESC_ELEVATOR_DOWN, alwaysVisible = True)
+	stairsDown = Object(newX, newY, defs.gStairsDown, "Elevator Down", libtcod.white, desc = defs.DESC_ELEVATOR_DOWN, alwaysVisible = True)
 	objects.append(stairsDown)
 	stairsDown.sendToBack()
 
@@ -1501,7 +1455,7 @@ def targetMonster(maxRange = None):
 	
 #This function watches the player's experience points and controls level ups.
 def checkLevelup():
-	xpToAdvance = data.ADVANCE_BASE + player.level * data.ADVANCE_FACTOR
+	xpToAdvance = defs.ADVANCE_BASE + player.level * defs.ADVANCE_FACTOR
 	if player.fighter.xp >= xpToAdvance:
 		player.level += 1
 		player.fighter.xp -= xpToAdvance
@@ -1514,33 +1468,33 @@ def checkLevelup():
 		mutationBonus = rnd()
 		if mutationBonus == 0:
 			#This mutation raises Zilla's attack
-			message("I feel a mutation coming on! I'm a GIANTESS! Large and in charge!", data.cZilla)
+			message("I feel a mutation coming on! I'm a GIANTESS! Large and in charge!", defs.cZilla)
 			player.fighter.baseAtk += 2
 		elif mutationBonus == 1:
 			#This mutation raises Zilla's defense
-			message("I feel a mutation coming on! I'm so TOUGH! My belly's as strong as iron!", data.cZilla)
+			message("I feel a mutation coming on! I'm so TOUGH! My belly's as strong as iron!", defs.cZilla)
 			player.fighter.baseDfn += 2
 		
 		#mutationChoice = libtcod.random_get_int(0, 0, 4)
 		#if mutationChoice == 0:
 		#	#This mutation raises Zilla's maximum size
-		#	message("I feel a mutation coming on! I feel like a GIANTESS!", data.cZilla)
+		#	message("I feel a mutation coming on! I feel like a GIANTESS!", defs.cZilla)
 		#	player.fighter.baseHits += 12
 		#elif mutationChoice == 1:
 		#	#This mutation raises Zilla's maximum gurgle
-		#	message("I feel a mutation coming on! My belly won't stop RUMBLING!", data.cZilla)
+		#	message("I feel a mutation coming on! My belly won't stop RUMBLING!", defs.cZilla)
 		#	player.fighter.baseSppt += 12	
 		#elif mutationChoice == 2:
 		#	#This mutation raises Zilla's defense
-		#	message("I feel a mutation coming on! My belly feels as TOUGH as iron!", data.cZilla)
+		#	message("I feel a mutation coming on! My belly feels as TOUGH as iron!", defs.cZilla)
 		#	player.fighter.baseDfn += 2
 		#elif mutationChoice == 3:
 		#	#This mutation raises Zilla's attack
-		#	message("I feel a mutation coming on! I'm feeling LARGE and in charge!", data.cZilla)
+		#	message("I feel a mutation coming on! I'm feeling LARGE and in charge!", defs.cZilla)
 		#	player.fighter.baseAtk += 2
 		#elif mutationChoice == 4:
 		#	#This mutation raises Zilla's damage
-		#	message("I feel a mutation coming on! I've never felt this STRONG!", data.cZilla)
+		#	message("I feel a mutation coming on! I've never felt this STRONG!", defs.cZilla)
 		#	player.fighter.baseMinDamage += 2
 		#	player.fighter.baseMaxDamage += 2
 				
@@ -1596,20 +1550,20 @@ def rndFromList(list):
 	return list[rnd(0, len(list) - 1)]
 	
 def generateTierZeroMonster():
-	atkRating = rnd(data.T0_MIN_ATK, data.T0_MAX_ATK)
-	dfnRating = rnd(data.T0_MIN_DEF, data.T0_MAX_DEF)
-	health = rnd(data.T0_MIN_HP, data.T0_MAX_HP)
-	experience = rnd(data.T0_MIN_XP, data.T0_MAX_XP)
-	return Fighter(hp = health, aura = 0, atk = atkRating, dfn = dfnRating, minDamage = data.T0_MIN_DAM, 
-		maxDamage = data.T0_MAX_DAM, xp = experience, deathEffect = monsterDeath)
+	atkRating = rnd(defs.T0_MIN_ATK, defs.T0_MAX_ATK)
+	dfnRating = rnd(defs.T0_MIN_DEF, defs.T0_MAX_DEF)
+	health = rnd(defs.T0_MIN_HP, defs.T0_MAX_HP)
+	experience = rnd(defs.T0_MIN_XP, defs.T0_MAX_XP)
+	return Fighter(hp = health, aura = 0, atk = atkRating, dfn = dfnRating, minDamage = defs.T0_MIN_DAM, 
+		maxDamage = defs.T0_MAX_DAM, xp = experience, deathEffect = monsterDeath)
 		
 def generateTierOneMonster():
-	atkRating = rnd(data.T1_MIN_ATK, data.T1_MAX_ATK)
-	dfnRating = rnd(data.T1_MIN_DEF, data.T1_MAX_DEF)
-	health = rnd(data.T1_MIN_HP, data.T1_MAX_HP)
-	experience = rnd(data.T1_MIN_XP, data.T1_MAX_XP)
-	return Fighter(hp = health, aura = 0, atk = atkRating, dfn = dfnRating, minDamage = data.T1_MIN_DAM, 
-		maxDamage = data.T1_MAX_DAM, xp = experience, deathEffect = monsterDeath)
+	atkRating = rnd(defs.T1_MIN_ATK, defs.T1_MAX_ATK)
+	dfnRating = rnd(defs.T1_MIN_DEF, defs.T1_MAX_DEF)
+	health = rnd(defs.T1_MIN_HP, defs.T1_MAX_HP)
+	experience = rnd(defs.T1_MIN_XP, defs.T1_MAX_XP)
+	return Fighter(hp = health, aura = 0, atk = atkRating, dfn = dfnRating, minDamage = defs.T1_MIN_DAM, 
+		maxDamage = defs.T1_MAX_DAM, xp = experience, deathEffect = monsterDeath)
 	
 #This function returns a value that depends on laboratory level. The table specifies what value occurs after each level, default is zero.
 def fromLabLevel(table):
@@ -1637,12 +1591,12 @@ def getAllEquipped(obj):
 #########################################################################################################
 #Initialize the consoles, font style, and FPS limit.
 libtcod.console_set_custom_font('terminal8x8_gs_tc.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
-libtcod.console_init_root(data.SCREEN_WIDTH, data.SCREEN_HEIGHT, "ZillaRL", False)
-libtcod.sys_set_fps(data.FPS_LIMIT)
+libtcod.console_init_root(defs.SCREEN_WIDTH, defs.SCREEN_HEIGHT, "ZillaRL", False)
+libtcod.sys_set_fps(defs.FPS_LIMIT)
 
-con = libtcod.console_new(data.MAP_WIDTH, data.MAP_HEIGHT)
-msgPanel = libtcod.console_new(data.MESSAGE_PANEL_WIDTH, data.MESSAGE_PANEL_HEIGHT)
-sidebar = libtcod.console_new(data.SIDEBAR_WIDTH, data.SIDEBAR_HEIGHT)
-infoPanel = libtcod.console_new(data.MAP_WIDTH / 2, data.MAP_HEIGHT)
+con = libtcod.console_new(defs.MAP_WIDTH, defs.MAP_HEIGHT)
+msgPanel = libtcod.console_new(defs.MESSAGE_PANEL_WIDTH, defs.MESSAGE_PANEL_HEIGHT)
+sidebar = libtcod.console_new(defs.SIDEBAR_WIDTH, defs.SIDEBAR_HEIGHT)
+infoPanel = libtcod.console_new(defs.MAP_WIDTH / 2, defs.MAP_HEIGHT)
 
 mainMenu()
