@@ -11,6 +11,7 @@ import libtcodpy as libtcod
 
 import zillarl_defs as defs
 import zillarl_script as script
+import zillarl_parse as loader
 
 import math
 import textwrap
@@ -162,7 +163,7 @@ class Fighter:
 			
 			#If the damage-taker is Zilla, and she falls below 13 HP, change her glyph
 			if self.owner == player and self.cond < 13:
-				message(defs.tinyWhines[rnd(0, len(defs.tinyWhines) - 1)], defs.cZilla)
+				message(script.zillaWhineTiny(), defs.cZilla)
 				player.glyph = defs.gZillaShrunk
 			
 			#Check for death. If there is a death function and the fighter's health is zero or lower,
@@ -286,23 +287,16 @@ class Item:
 			if self.useEffect() != "cancel":
 				if self.useEffect() == "eat":
 					#This means that the item was food and Zilla successfully ate it
-					#addedWeight = self.bloat * (player.fighter.hits / player.fighter.cond)
-					#player.weight += addedWeight
-					player.weight += self.bloat
-					message(script.zillaEats("eat", self.owner.name, self.bloat), libtcod.purple)
-					#if addedWeight == 1:
-					#	message("Zilla " + rndFromList(defs.eatVerbs) + " the "
-					#		+ self.owner.name + " " + rndFromList(defs.eatAdverbs)
-					#		+ " and gains " + str(addedWeight) + " pound.", libtcod.purple)
-					#else:
-					#	message("Zilla " + rndFromList(defs.eatVerbs) + " the "
-					#		+ self.owner.name + " " + rndFromList(defs.eatAdverbs)
-					#		+ " and gains " + str(addedWeight) + " pounds.", libtcod.purple)
+					addedWeight = self.bloat #* (player.fighter.hits / player.fighter.cond)
+					player.weight += addedWeight
+					message(script.zillaEats("eat", self.owner.name, addedWeight), libtcod.purple)
 							
 				if self.useEffect() == "drink":
 					#This means that the item was a drink and Zilla successfully drank it
-					player.weight += self.bloat
+					addedWeight = self.bloat #* (player.fighter.hits / player.fighter.cond)
+					player.weight += addedWeight
 					message(script.zillaEats("drink", self.owner.name, self.bloat), libtcod.purple)
+					
 				#Destroy the item after use, unless it was cancelled.
 				inventory.remove(self.owner) 
 	
@@ -1069,7 +1063,7 @@ def castAreaShrink():
 	
 	for obj in objects:
 		if obj.distance(x, y) <= defs.SHRINK_CHANT_RADIUS and obj.fighter:
-			message("The " + obj.name + " " + rndFromList(defs.shrinkVerbs) + "!", libtcod.purple)
+			message("The " + obj.name + " " + script.selectFromList(script.shrinkNoises) + "!", libtcod.purple)
 			damageAmount = rnd(defs.SHRINK_CHANT_MIN_DAMAGE, defs.SHRINK_CHANT_MAX_DAMAGE)
 			damageAmount = damageAmount * player.level
 			obj.fighter.takeDamage(damageAmount)
@@ -1355,10 +1349,10 @@ def placeObjects(room):
 			#Only place the object if the tile is not blocked.
 			choice = chooseFromDict(monsterChances)
 			if choice == "tierZero":
-				monster = copy.deepcopy(rndFromList(tierZeroMonsters))
+				monster = copy.deepcopy(script.selectFromList(tierZeroMonsters))
 					
 			elif choice == "tierOne":
-				monster = copy.deepcopy(rndFromList(tierOneMonsters))
+				monster = copy.deepcopy(script.selectFromList(tierOneMonsters))
 						
 			monster.x = x
 			monster.y = y
@@ -1382,13 +1376,13 @@ def placeObjects(room):
 			#Only place this item if the tile is not blocked.
 			choice = chooseFromDict(itemChances)
 			if choice == "potion":
-				item = copy.deepcopy(rndFromList(potions))
+				item = copy.deepcopy(script.selectFromList(potions))
 				
 			elif choice == "food":
-				item = copy.deepcopy(rndFromList(food))
+				item = copy.deepcopy(script.selectFromList(food))
 				
 			elif choice == "armor":
-				item = copy.deepcopy(rndFromList(armors))
+				item = copy.deepcopy(script.selectFromList(armors))
 			
 			#item.alwaysVisible = True
 			item.x = x
@@ -1474,29 +1468,6 @@ def checkLevelup():
 			#This mutation raises Zilla's defense
 			message("I feel a mutation coming on! I'm so TOUGH! My belly's as strong as iron!", defs.cZilla)
 			player.fighter.baseDfn += 2
-		
-		#mutationChoice = libtcod.random_get_int(0, 0, 4)
-		#if mutationChoice == 0:
-		#	#This mutation raises Zilla's maximum size
-		#	message("I feel a mutation coming on! I feel like a GIANTESS!", defs.cZilla)
-		#	player.fighter.baseHits += 12
-		#elif mutationChoice == 1:
-		#	#This mutation raises Zilla's maximum gurgle
-		#	message("I feel a mutation coming on! My belly won't stop RUMBLING!", defs.cZilla)
-		#	player.fighter.baseSppt += 12	
-		#elif mutationChoice == 2:
-		#	#This mutation raises Zilla's defense
-		#	message("I feel a mutation coming on! My belly feels as TOUGH as iron!", defs.cZilla)
-		#	player.fighter.baseDfn += 2
-		#elif mutationChoice == 3:
-		#	#This mutation raises Zilla's attack
-		#	message("I feel a mutation coming on! I'm feeling LARGE and in charge!", defs.cZilla)
-		#	player.fighter.baseAtk += 2
-		#elif mutationChoice == 4:
-		#	#This mutation raises Zilla's damage
-		#	message("I feel a mutation coming on! I've never felt this STRONG!", defs.cZilla)
-		#	player.fighter.baseMinDamage += 2
-		#	player.fighter.baseMaxDamage += 2
 				
 #This function chooses one option from a list of chances, returning its index. The dice will land 
 #on some number between one and the sum of the chances.
@@ -1536,34 +1507,13 @@ def convertWeight(amount):
 		return str("%.2f" % round(convertedToTons, 2)) + " tons"
 	
 #########################################################################################################
-# [MISCELLANEOUS]                                                                                       #
+# [RANDOM NUMBER GENERATION]                                                                            #
 #########################################################################################################
 	
 #This function is a more concise way of invoking the libtcod random function, for shortening
 #the function call. Calling the function without parameters flips a coin (returns either 0 or 1).
 def rnd(min = 0, max = 1):
 	return libtcod.random_get_int(0, min, max)
-	
-#This function returns a random entry from a list, used for the many points in the program where it
-#randomly selects a string from a list of strings.
-def rndFromList(list):
-	return list[rnd(0, len(list) - 1)]
-	
-def generateTierZeroMonster():
-	atkRating = rnd(defs.T0_MIN_ATK, defs.T0_MAX_ATK)
-	dfnRating = rnd(defs.T0_MIN_DEF, defs.T0_MAX_DEF)
-	health = rnd(defs.T0_MIN_HP, defs.T0_MAX_HP)
-	experience = rnd(defs.T0_MIN_XP, defs.T0_MAX_XP)
-	return Fighter(hp = health, aura = 0, atk = atkRating, dfn = dfnRating, minDamage = defs.T0_MIN_DAM, 
-		maxDamage = defs.T0_MAX_DAM, xp = experience, deathEffect = monsterDeath)
-		
-def generateTierOneMonster():
-	atkRating = rnd(defs.T1_MIN_ATK, defs.T1_MAX_ATK)
-	dfnRating = rnd(defs.T1_MIN_DEF, defs.T1_MAX_DEF)
-	health = rnd(defs.T1_MIN_HP, defs.T1_MAX_HP)
-	experience = rnd(defs.T1_MIN_XP, defs.T1_MAX_XP)
-	return Fighter(hp = health, aura = 0, atk = atkRating, dfn = dfnRating, minDamage = defs.T1_MIN_DAM, 
-		maxDamage = defs.T1_MAX_DAM, xp = experience, deathEffect = monsterDeath)
 	
 #This function returns a value that depends on laboratory level. The table specifies what value occurs after each level, default is zero.
 def fromLabLevel(table):
@@ -1599,4 +1549,5 @@ msgPanel = libtcod.console_new(defs.MESSAGE_PANEL_WIDTH, defs.MESSAGE_PANEL_HEIG
 sidebar = libtcod.console_new(defs.SIDEBAR_WIDTH, defs.SIDEBAR_HEIGHT)
 infoPanel = libtcod.console_new(defs.MAP_WIDTH / 2, defs.MAP_HEIGHT)
 
+loader.loadObjectData()
 mainMenu()

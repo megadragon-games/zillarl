@@ -105,29 +105,6 @@ cZilla = libtcod.sepia
 cBikiniArmor = libtcod.pink
 cBarrel = libtcod.darker_sepia
 
-#Monster Statistic Limits
-T0_MIN_ATK = 1
-T0_MAX_ATK = 2
-T0_MIN_DEF = 1
-T0_MAX_DEF = 2
-T0_MIN_DAM = 1
-T0_MAX_DAM = 2
-T0_MIN_HP = 8
-T0_MAX_HP = 12
-T0_MIN_XP = 20
-T0_MAX_XP = 40
-
-T1_MIN_ATK = 2
-T1_MAX_ATK = 4
-T1_MIN_DEF = 2
-T1_MAX_DEF = 4
-T1_MIN_DAM = 2
-T1_MAX_DAM = 4
-T1_MIN_HP = 12
-T1_MAX_HP = 18
-T1_MIN_XP = 80
-T1_MAX_XP = 120
-
 #Food Bloat Ratings
 B_FRUIT = 1
 B_BURGER = 3
@@ -135,23 +112,6 @@ B_BLOATBERRY = 6
 B_GALLON = 8
 B_KEG = B_GALLON * 15 		#15 gallons
 B_BARREL = B_GALLON * 31 	#31 gallons
-
-bellyImpactNoises = ["bumps", "bashes", "whacks", "thumps", "squishes", "squashes", "smacks"]
-shrinkNoises = ["shrinks", "dwindles", "shrivels", "melts"]
-
-eatVerbs = ["eats", "munches", "chomps", "gulps", "swallows"]
-drinkVerbs = ["drinks", "gulps", "chugs"]
-eatAdverbs = ["messily", "noisily", "quickly", "slowly"]
-
-zillaHarmlessAttackStrings = ["bounces off harmlessly!", 
-	"only manages to make herself belch!",
-	"only manages to make herself gurgle!"]
-monsterHarmlessAttackStrings = ["bounces harmlessly off her belly!",
-	"only tickles her!"]
-
-tinyWhines = ["Mmph! You're a big one, aren't you?",
-	"I'm feeling rather small...",
-	"Hehe... not so rough, big boy!"]
 	
 #Descriptions
 DESC_DEFAULT = "This object has no description."

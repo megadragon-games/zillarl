@@ -70,6 +70,9 @@ def zillaAttackedButMissed(monsterName):
 	line = "The " + monsterName + " attacks Zilla, but " + selectFromList(monsterHarmlessAttackStrings)
 	return line
 	
+def zillaWhineTiny():
+	return selectFromList(tinyWhines)
+
 #This function returns a message for when Zilla eats or drinks.
 def zillaEats(eatOrDrink, eatenItem, addedWeight):
 	choice = libtcod.random_get_int(0, 1, 4)
