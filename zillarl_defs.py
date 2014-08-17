@@ -28,6 +28,7 @@ gPotion = "?"
 gScroll = "!"
 gArmor = "]"
 gBarrel = "0"
+gRune = "&"
 
 #Monster Types
 gBellything = "b"	#Bellymage, Bellylord

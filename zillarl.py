@@ -2,8 +2,8 @@
 # zillarl.py
 #    by Bluey
 # Main Python script for Bigger is Better (ZillaRL).
-# http://www.forcastia.com | http://gaingirls.tumblr.com
-#    Last updated on July 21, 2014
+# http://www.forcastia.com | http://the-gain-girl.tumblr.com
+#    Last updated on August 15, 2014
 #    2014 Studio Draconis
 ########################################################################################################
 
@@ -1360,10 +1360,10 @@ def placeObjects(room):
 	
 	maxItems = fromLabLevel([[1,1], [2,4]])
 	#itemChances = {"heal": 70, "lightning": 10, "fireball": 10, "confuse": 10}
-	itemChances = {}
-	itemChances["food"] = 90
-	itemChances["potion"] = fromLabLevel([[10,1], [15,3]])
-	itemChances["armor"] = fromLabLevel([[5,1], [10,4]])
+	#itemChances = {}
+	#itemChances["food"] = 90
+	#itemChances["potion"] = fromLabLevel([[10,1], [15,3]])
+	#itemChances["armor"] = fromLabLevel([[5,1], [10,4]])
 	
 	numberOfItems = libtcod.random_get_int(0, 0, maxItems)
 	
@@ -1373,22 +1373,25 @@ def placeObjects(room):
 		y = libtcod.random_get_int(0, room.y1 + 1, room.y2 - 1)
 
 		if not isBlocked(x,y):
+			itemToPlace = generateItem(x,y)
+			objects.append(itemToPlace)
+			itemToPlace.sendToBack()
 			#Only place this item if the tile is not blocked.
-			choice = chooseFromDict(itemChances)
-			if choice == "potion":
-				item = copy.deepcopy(script.selectFromList(potions))
-				
-			elif choice == "food":
-				item = copy.deepcopy(script.selectFromList(food))
-				
-			elif choice == "armor":
-				item = copy.deepcopy(script.selectFromList(armors))
+			#choice = chooseFromDict(itemChances)
+			#if choice == "potion":
+			#	item = copy.deepcopy(script.selectFromList(potions))
+			#	
+			#elif choice == "food":
+			#	item = copy.deepcopy(script.selectFromList(food))
+			#	
+			#elif choice == "armor":
+			#	item = copy.deepcopy(script.selectFromList(armors))
 			
 			#item.alwaysVisible = True
-			item.x = x
-			item.y = y
-			objects.append(item)
-			item.sendToBack() #Items appear below other objects.
+			#item.x = x
+			#item.y = y
+			#objects.append(item)
+			#item.sendToBack() #Items appear below other objects.
 			
 #This function advances to the next level in the dungeon.
 def nextLevel():
@@ -1537,6 +1540,57 @@ def getAllEquipped(obj):
 		return equippedList
 	else:
 		return [] #Non-player objects do not have equipment.
+	
+#This function generates an item using the object data loaded through parsing. It takes the generation
+#step by step, putting together components as necessary, and finally returns the entire new Object.	
+def generateItem(x, y):
+	itemChances = {"food": 50, "potion": 20, "suit": 15}
+	typeChoice = chooseFromDict(itemChances)
+	
+	if typeChoice == "food":
+		itemChoice = script.selectFromList(loader.itemsFood)
+	if typeChoice == "potion":
+		itemChoice = script.selectFromList(loader.itemsPotions)
+	if typeChoice == "suit":
+		itemChoice = script.selectFromList(loader.itemsSuits)
+	
+	chosenData = loader.rawItemData[itemChoice]
+			
+	#First, we need to read chosenData's kind and assign it the proper glyph.
+	if chosenData["kind"] == "food":
+		glyphValue = defs.gFood
+	elif chosenData["kind"] == "potion":
+		glyphValue = defs.gPotion
+	elif chosenData["kind"] == "suit":
+		glyphValue = defs.gArmor
+	
+	# If the BLOAT value exists in the chosen item's struct, then the item component will need that value
+	# added in.
+	if "bloat" in chosenData:
+		bloatValue = chosenData["bloat"]
+	else:
+		bloatValue = 0
+			
+	# If the SLOT value exists in the chosen item's struct, then the item is an Equipment and will need
+	# the appropriate type.
+	if 'slot' in chosenData:
+		equipComponent = Equipment(slot = chosenData['slot'])
+	else:
+		equipComponent = None
+				
+	# If the item has a use function, add that to the item's object.
+	if 'useEffect' in chosenData:
+		useEffect = chosenData['useEffect']
+	else:
+		useEffect = None
+				
+	itemComponent = Item(bloat = bloatValue, useEffect = useEffect)
+	if equipComponent is not None:
+		return Object(x, y, glyph = glyphValue, name = chosenData['name'], color = chosenData['col'], 
+			desc = chosenData["dsc"], alwaysVisible = True, equipment = equipComponent)
+	else:
+		return Object(x, y, glyph = glyphValue, name = chosenData['name'], color = chosenData['col'], 
+			desc = chosenData["dsc"], alwaysVisible = True, item = itemComponent)
 
 #########################################################################################################
 #Initialize the consoles, font style, and FPS limit.
