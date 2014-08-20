@@ -10,13 +10,16 @@
 import libtcodpy as libtcod
 
 import zillarl_defs as defs
+#import zillarl_rng as rng
 import zillarl_script as script
 import zillarl_parse as loader
 
 import math
 import textwrap
 import shelve 
-import copy
+#import copy
+	
+option_debug = True
 	
 #########################################################################################################
 # [UTILITY CLASSES]                                                                                     #
@@ -27,7 +30,7 @@ import copy
 #the game screen.	
 class Object:
 	#INIT initializes and constructs the object with the given parameters.
-	def __init__(self, x, y, glyph, name, color, desc = defs.DESC_DEFAULT, blocks = False, alwaysVisible = False, 
+	def __init__(self, x, y, glyph, name, color, desc = script.DESC_DEFAULT, blocks = False, alwaysVisible = False, 
 		fighter = None, ai = None, item = None, equipment = None):
 		self.name = name
 		self.blocks = blocks
@@ -134,7 +137,7 @@ class Fighter:
 	def minDamage(self):
 		bonus = sum(equipment.minDamBonus for equipment in getAllEquipped(self.owner))
 		if self.owner == player:
-			return self.baseMinDamage + bonus + (player.weight / 120 - 1)
+			return self.baseMinDamage + bonus + (player.weight / 300)
 		else:
 			return self.baseMinDamage + bonus
 	
@@ -142,7 +145,7 @@ class Fighter:
 	def maxDamage(self):
 		bonus = sum(equipment.maxDamBonus for equipment in getAllEquipped(self.owner))
 		if self.owner == player:
-			return self.baseMaxDamage + bonus + (player.weight / 120 - 1)
+			return self.baseMaxDamage + bonus + (player.weight / 200)
 		else:
 			return self.baseMaxDamage + bonus
 	
@@ -259,7 +262,14 @@ class Item:
 	#INIT constructs the item component.
 	def __init__(self, bloat = 0, useEffect = None):
 		self.bloat = bloat
-		self.useEffect = useEffect
+		
+		#If useEffect is just a string, we pass that string to the globals() function to return the
+		#function that has the string's name. The goal is to make sure that useEffect is a function,
+		#and no other type.
+		if isinstance(useEffect, str):
+			self.useEffect = globals()[useEffect]
+		else:
+			self.useEffect = useEffect
 	
 	#PICKUP removes the item from the map and adds the item to the player's inventory.
 	def pickup(self):
@@ -308,7 +318,8 @@ class Item:
 		inventory.remove(self.owner)
 		self.owner.x = player.x
 		self.owner.y = player.y
-		message("You dropped a " + self.owner.name + ".", libtcod.yellow)
+		self.owner.sendToBack()
+		message(self.owner.name + " dropped.", libtcod.yellow)
 	
 class Equipment:
 	def __init__(self, slot, atkBonus = 0, dfnBonus = 0, minDamBonus = 0, maxDamBonus = 0, hpBonus = 0, 
@@ -381,8 +392,8 @@ def startNewGame():
 	global player, inventory, messageLog, gameState, dungeonLevel
 	
 	#Create an object representing the player.
-	fighterComponent = Fighter(hp = 64, aura = 24, atk = 2, dfn = 2, minDamage = 2, maxDamage = 3, xp = 0, deathEffect = playerDeath)
-	player = Object(0, 0, defs.gZilla, "Zilla", defs.cZilla, desc = defs.DESC_ZILLA, blocks = True, fighter = fighterComponent)
+	fighterComponent = Fighter(hp = defs.ZILLA_HITS, aura = defs.ZILLA_SPPT, atk = defs.ZILLA_ATK, dfn = defs.ZILLA_DEF, minDamage = defs.ZILLA_MIN, maxDamage = defs.ZILLA_MAX, xp = 0, deathEffect = playerDeath)
+	player = Object(0, 0, defs.gZilla, "Zilla", defs.cZilla, desc = script.DESC_ZILLA, blocks = True, fighter = fighterComponent)
 	
 	player.level = 1
 	player.weight = 120
@@ -401,10 +412,16 @@ def startNewGame():
 	message("[SIMULATION COMMENCING]", libtcod.cyan)
 	
 	#Initial equipment. The equipment's isWorn is forced True to suppress the "puts on" message.
-	startingBikini = copy.deepcopy(I_SHIFTER_SKIVVIES)
+	#startingBikini = copy.deepcopy(I_SHIFTER_SKIVVIES)
+	
+	zillaBikiniData = loader.rawItemData["zilla_bikini"]
+	equipComponent = Equipment(slot = zillaBikiniData["slot"])
+	startingBikini = Object(0, 0, glyph = defs.gArmor, name = zillaBikiniData["name"], 
+		color = zillaBikiniData["col"], desc = zillaBikiniData["dsc"], alwaysVisible = True, 
+		equipment = equipComponent)
 	inventory.append(startingBikini)
 	startingBikini.equipment.isWorn = True
-	inventory.append(copy.deepcopy(I_POTION_MINORGROWTH))
+	#inventory.append(copy.deepcopy(I_POTION_MINORGROWTH))
 	
 def initializeFOV():
 	global fovNeedsToBeRecomputed, fovMap
@@ -638,31 +655,34 @@ def getNamesUnderMouse():
 #width is defined in the method. A letter will be shown next to each option (A, B, etc) so the user can
 #select it by pressing that key. The function returns the index of the selected option, starting with
 #zero, or None if the user pressed a different key.
-def menu(header, options, width):
+def menu(header, options, width, foregroundColor = libtcod.white, backgroundColor = libtcod.black, title = None):
 	if len(options) > 26: raise ValueError("Cannot have a menu with more than twenty-six options.")
 	
 	#Calculate total height for the header (after auto-wrap) and one line per option.
-	headerHeight = libtcod.console_get_height_rect(con, 0, 0, width, defs.SCREEN_HEIGHT, header)
+	headerHeight = libtcod.console_get_height_rect(con, 0, 0, width - 2, defs.SCREEN_HEIGHT, header)
 	if header == "":
 		headerHeight = 0
-	height = len(options) + headerHeight
+	height = len(options) + headerHeight + 2
 	
 	#Create an off-screen console that represents the menu's window.
 	window = libtcod.console_new(width, height)
 	
 	#Print the header, with auto-wrap.
-	libtcod.console_set_default_foreground(window, libtcod.white)
-	libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
+	libtcod.console_set_default_background(window, backgroundColor)
+	libtcod.console_clear(window)
+	libtcod.console_set_default_foreground(window, foregroundColor)
+	libtcod.console_print_frame(window, 0, 0, width, height, False, libtcod.BKGND_NONE, title)
+	libtcod.console_print_rect_ex(window, 1, 1, width - 2, height - 2, libtcod.BKGND_NONE, libtcod.LEFT, header)
 	
 	#Print all the options, one by one. ORD and CHR are built-in Python functions. chr(i) returns a string
 	#of one character whose ASCII code is in the integer i - for example, chr(97) returns "a". ord(c) is
 	#the opposite - given a string of length one, it returns an integer representing the Unicode code
 	#point of the character - for example, ord("a") returns 97.
-	y = headerHeight
+	y = headerHeight + 1
 	letterIndex = ord("a")
 	for optionText in options:
 		text = "(" + chr(letterIndex) + ") " + optionText
-		libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+		libtcod.console_print_ex(window, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
 		y += 1
 		letterIndex += 1
 		
@@ -688,7 +708,7 @@ def menu(header, options, width):
 	
 #This function announces something using the menu function as an impromptu message box.
 def announce(text, width = 50):
-	menu(text, [], width)
+	menu(text, [], width, libtcod.white, libtcod.black)
 	
 def itemMenu(activeItem):
 	#Create an off-screen console that represents the item window.
@@ -863,7 +883,10 @@ def renderAll():
 					if wall:
 						libtcod.console_set_char_background(con, x, y, defs.cLitWall, libtcod.BKGND_SET)
 					else:
-						libtcod.console_set_char_background(con, x, y, defs.cLitGround, libtcod.BKGND_SET)
+						if (x % 2 + y % 2) % 2 == 0:
+							libtcod.console_set_char_background(con, x, y, defs.cLitGround, libtcod.BKGND_SET)
+						else:
+							libtcod.console_set_char_background(con, x, y, defs.cLitGroundAlternate, libtcod.BKGND_SET)
 					map[x][y].explored = True
 	
 	#Draw all objects in the list, except the player, which needs to be drawn last.
@@ -1022,7 +1045,7 @@ def genericDrink():
 	return "drink"
 
 #This function heals Zilla.
-def growPotion():
+def itemMinorGrow():
 	if player.fighter.cond == player.fighter.hits:
 		message("I'm already at full size. This potion won't make me any bigger.", defs.cZilla)
 		return "cancel"
@@ -1083,119 +1106,6 @@ def castFireball():
 			message("The " + obj.name + " is burned for " + str(defs.FIREBALL_DAMAGE) + 
 				" points of fire damage.", libtcod.orange)
 			obj.fighter.takeDamage(defs.FIREBALL_DAMAGE)
-
-#########################################################################################################
-# [MONSTER TEMPLATES]                                                                                   #
-# These templates must go after the majority of the script's function declarations as they depend on    #
-# the declared functions.                                                                               #
-#########################################################################################################
-
-M_NEWT = Object(0, 0, defs.gLizard, "Newt", libtcod.blue, desc = defs.DESC_NEWT, blocks = True,
-	fighter = Fighter(hp = 8, aura = 0, atk = 1, dfn = 1, minDamage = 1, maxDamage = 1, xp = 20, deathEffect = monsterDeath),
-	ai = BasicMonster())
-	
-M_GECKO = Object(0, 0, defs.gLizard, "Gecko", libtcod.chartreuse, desc = defs.DESC_GECKO, blocks = True,
-	fighter = Fighter(hp = 8, aura = 0, atk = 1, dfn = 2, minDamage = 1, maxDamage = 1, xp = 25, deathEffect = monsterDeath),
-	ai = BasicMonster())
-	
-M_LIZARD = Object(0, 0, defs.gLizard, "Lizard", libtcod.green, desc = defs.DESC_LIZARD, blocks = True, 
-	fighter = Fighter(hp = 12, aura = 0, atk = 2, dfn = 1, minDamage = 1, maxDamage = 2, xp = 25, deathEffect = monsterDeath), 
-	ai = BasicMonster())
-
-M_BELLYIMP = Object(0, 0, defs.gBellything, "Bellyimp", libtcod.purple, desc = defs.DESC_BELLYIMP, blocks = True,
-	fighter = Fighter(hp = 10, aura = 0, atk = 3, dfn = 1, minDamage = 2, maxDamage = 4, xp = 50, deathEffect = monsterDeath),  
-	ai = BasicMonster())
-
-M_SNAKE = Object(0, 0, defs.gSnake, "Snake", libtcod.black, desc = defs.DESC_SNAKE, blocks = True,
-	fighter = Fighter(hp = 8, aura = 0, atk = 2, dfn = 1, minDamage = 2, maxDamage = 2, xp = 30, deathEffect = monsterDeath),  
-	ai = BasicMonster())
-	
-tierZeroMonsters = [M_NEWT, M_GECKO, M_LIZARD, M_BELLYIMP, M_SNAKE]
-
-M_BELLYDEMON = Object(0, 0, defs.gBellything, "Bellydemon", libtcod.violet, blocks = True,
-	fighter = Fighter(hp = 40, aura = 0, atk = 4, dfn = 3, minDamage = 3, maxDamage = 4, xp = 200, deathEffect = monsterDeath),  
-	ai = BasicMonster())
-
-M_DIRE_CHARR = Object(0, 0, defs.gCharr, "Dire Charr", libtcod.orange, blocks = True,
-	fighter = Fighter(hp = 18, aura = 0, atk = 4, dfn = 2, minDamage = 2, maxDamage = 4, xp = 160, deathEffect = monsterDeath),  
-	ai = BasicMonster())
-	
-M_ALLIGATOR = Object(0, 0, defs.gCrocodilian, "Alligator", libtcod.green, blocks = True,
-	fighter = Fighter(hp = 22, aura = 0, atk = 3, dfn = 3, minDamage = 2, maxDamage = 6, xp = 180, deathEffect = monsterDeath),  
-	ai = BasicMonster())
-				
-M_KANGAROO = Object(0, 0, defs.gMarsupial, "Kangaroo", libtcod.darker_sepia, blocks = True,
-	fighter = Fighter(hp = 16, aura = 0, atk = 2, dfn = 2, minDamage = 2, maxDamage = 4, xp = 120, deathEffect = monsterDeath),  
-	ai = BasicMonster())
-				
-M_CROCODILE = Object(0, 0, defs.gCrocodilian, "Crocodile", libtcod.darker_green, blocks = True,
-	fighter = Fighter(hp = 22, aura = 0, atk = 3, dfn = 3, minDamage = 2, maxDamage = 6, xp = 180, deathEffect = monsterDeath),  
-	ai = BasicMonster())
-
-tierOneMonsters = [M_BELLYDEMON, M_DIRE_CHARR, M_ALLIGATOR, M_KANGAROO, M_CROCODILE]
-
-#########################################################################################################
-# [ITEM TEMPLATES]                                                                                      #
-# These templates must go after the majority of the script's function declarations as they depend on    #
-# the declared functions.                                                                               #
-#########################################################################################################			
-#Hamburger, Chicken, Pasta, Cake, Bread, Shrinkberry, Growberry, Toxic waste, Ice cream
-I_BANANA = Object(0, 0, defs.gFood, "Banana", libtcod.yellow, desc = defs.DESC_BANANA, alwaysVisible = True,
-	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
-
-I_APPLE = Object(0, 0, defs.gFood, "Apple", libtcod.red, desc = defs.DESC_APPLE, alwaysVisible = True,
-	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
-	
-I_PEAR = Object(0, 0, defs.gFood, "Pear", libtcod.light_green, desc = defs.DESC_PEAR, alwaysVisible = True,
-	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
-	
-I_ORANGE = Object(0, 0, defs.gFood, "Orange", libtcod.orange, desc = defs.DESC_ORANGE, alwaysVisible = True,
-	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
-	
-I_MANGO = Object(0, 0, defs.gFood, "Mango", libtcod.dark_orange, desc = defs.DESC_MANGO, alwaysVisible = True,
-	item = Item(bloat = defs.B_FRUIT, useEffect = genericEat))
-
-I_JUG_MILK = Object(0, 0, defs.gFood, "Jug of Milk", libtcod.white, desc = defs.DESC_JUG_MILK, alwaysVisible = True,
-	item = Item(bloat = defs.B_GALLON, useEffect = genericDrink))
-
-I_JUG_APPLEJUICE = Object(0, 0, defs.gFood, "Jug of Apple Juice", libtcod.light_yellow, desc = defs.DESC_JUG_APPLEJUICE, alwaysVisible = True,
-	item = Item(bloat = defs.B_GALLON, useEffect = genericDrink))
-
-I_JUG_ORANGEJUICE = Object(0, 0, defs.gFood, "Jug of Orange Juice", libtcod.orange, desc = defs.DESC_JUG_ORANGEJUICE, alwaysVisible = True,
-	item = Item(bloat = defs.B_GALLON, useEffect = genericDrink))	
-
-I_BLOATBERRY = Object(0, 0, defs.gFood, "Bloatberry", libtcod.purple, desc = defs.DESC_BLOATBERRY, alwaysVisible = True,
-	item = Item(bloat = defs.B_BLOATBERRY, useEffect = genericEat))
-	
-I_KEG_COLA = Object(0, 0, defs.gBarrel, "Keg of Cola", libtcod.black, desc = defs.DESC_KEG_COLA, alwaysVisible = True,
-	item = Item(bloat = defs.B_KEG, useEffect = genericDrink))
-	
-I_BARREL_COLA = Object(0, 0, defs.gBarrel, "Barrel of Cola", libtcod.darkest_sepia, desc = defs.DESC_BARREL_COLA, alwaysVisible = True,
-	item = Item(bloat = defs.B_BARREL, useEffect = genericDrink))
-	
-food = [I_BANANA, I_APPLE, I_PEAR, I_ORANGE, I_MANGO, I_JUG_MILK, I_JUG_APPLEJUICE, I_JUG_ORANGEJUICE,
-	I_BLOATBERRY, I_KEG_COLA, I_BARREL_COLA]
-
-I_POTION_MINORGROWTH = Object(0, 0, defs.gPotion, "Potion of Minor Growth", libtcod.red, desc = defs.DESC_POTION_MINORGROWTH, alwaysVisible = True,
-	item = Item(useEffect = growPotion))
-
-potions = [I_POTION_MINORGROWTH]
-	
-#The Shifter Skivvies are Zilla's starting outfit and do not have equipment bonuses nor is it generated
-#randomly.
-I_SHIFTER_SKIVVIES = Object(0, 0, defs.gArmor, "Shifter Skivvies", libtcod.purple, desc = defs.DESC_SHIFTER_SKIVVIES, alwaysVisible = True,
-	equipment = Equipment(slot = "bikini"))
-	
-I_FLORAL_BIKINI = Object(0, 0, defs.gArmor, "Floral Bikini", libtcod.pink, desc = defs.DESC_FLORAL_BIKINI, alwaysVisible = True,
-	equipment = Equipment(slot = "bikini", dfnBonus = 1))
-	
-I_BRAWLER_BIKINI = Object(0, 0, defs.gArmor, "Brawler Bikini", libtcod.red, desc = defs.DESC_BRAWLER_BIKINI, alwaysVisible = True,
-	equipment = Equipment(slot = "bikini", atkBonus = 2))
-	
-I_CHAINMAIL_BIKINI = Object(0, 0, defs.gArmor, "Chainmail Bikini", libtcod.dark_gray, desc = defs.DESC_CHAINMAIL_BIKINI, alwaysVisible = True,
-	equipment = Equipment(slot = "bikini", dfnBonus = 3))
-	
-armors = [I_FLORAL_BIKINI, I_BRAWLER_BIKINI, I_CHAINMAIL_BIKINI]
 
 #########################################################################################################
 # [DUNGEON GENERATION AND POPULATION FUNCTIONS]                                                         #
@@ -1330,12 +1240,8 @@ def makeMap():
 
 #This function places objects into a room.
 def placeObjects(room):
-	#Choose a random number of monsters below the maximum
+	#Choose a random number of monsters up to or below the level's maximum to place in the room.
 	maxMonsters = fromLabLevel([[2,1], [3,4], [5,6]])
-	monsterChances = {}
-	monsterChances["tierZero"] = 80
-	monsterChances["tierOne"] = fromLabLevel([[15,3], [30,5], [60,7]])
-	
 	numberOfMonsters = libtcod.random_get_int(0, 0, maxMonsters)
 	
 	for i in range(numberOfMonsters):
@@ -1346,25 +1252,14 @@ def placeObjects(room):
 		y = libtcod.random_get_int(0, room.y1 + 1, room.y2 - 1)
 		
 		if not isBlocked(x,y):
-			#Only place the object if the tile is not blocked.
-			choice = chooseFromDict(monsterChances)
-			if choice == "tierZero":
-				monster = copy.deepcopy(script.selectFromList(tierZeroMonsters))
-					
-			elif choice == "tierOne":
-				monster = copy.deepcopy(script.selectFromList(tierOneMonsters))
-						
-			monster.x = x
-			monster.y = y
-			objects.append(monster)
+			#We can only place the monster if the tile is not blocked.
+			monsterToPlace = generateMonster(x,y)
+			if option_debug:
+				print "Placing " + monsterToPlace.name + " at " + str(x) + "," + str(y)
+			objects.append(monsterToPlace)
 	
+	#Choose a random number of items below the level's maximum to place in the room
 	maxItems = fromLabLevel([[1,1], [2,4]])
-	#itemChances = {"heal": 70, "lightning": 10, "fireball": 10, "confuse": 10}
-	#itemChances = {}
-	#itemChances["food"] = 90
-	#itemChances["potion"] = fromLabLevel([[10,1], [15,3]])
-	#itemChances["armor"] = fromLabLevel([[5,1], [10,4]])
-	
 	numberOfItems = libtcod.random_get_int(0, 0, maxItems)
 	
 	for i in range(numberOfItems):
@@ -1373,25 +1268,14 @@ def placeObjects(room):
 		y = libtcod.random_get_int(0, room.y1 + 1, room.y2 - 1)
 
 		if not isBlocked(x,y):
+			#We can only place the item if the tile is not blocked.
 			itemToPlace = generateItem(x,y)
+			if option_debug:
+				print "Placing " + itemToPlace.name + " at " + str(x) + "," + str(y)
 			objects.append(itemToPlace)
-			itemToPlace.sendToBack()
-			#Only place this item if the tile is not blocked.
-			#choice = chooseFromDict(itemChances)
-			#if choice == "potion":
-			#	item = copy.deepcopy(script.selectFromList(potions))
-			#	
-			#elif choice == "food":
-			#	item = copy.deepcopy(script.selectFromList(food))
-			#	
-			#elif choice == "armor":
-			#	item = copy.deepcopy(script.selectFromList(armors))
 			
-			#item.alwaysVisible = True
-			#item.x = x
-			#item.y = y
-			#objects.append(item)
-			#item.sendToBack() #Items appear below other objects.
+			#Unlike monsters, items must be drawn below all other objects.
+			itemToPlace.sendToBack()
 			
 #This function advances to the next level in the dungeon.
 def nextLevel():
@@ -1461,16 +1345,24 @@ def checkLevelup():
 		player.fighter.baseSppt += rnd(6,12)
 		player.fighter.heal(player.fighter.hits)
 		player.fighter.recover(player.fighter.sppt)
+		message("I love a good mutation! I feel bigger and stronger already!", defs.cZilla)
 		
-		mutationBonus = rnd()
-		if mutationBonus == 0:
-			#This mutation raises Zilla's attack
-			message("I feel a mutation coming on! I'm a GIANTESS! Large and in charge!", defs.cZilla)
-			player.fighter.baseAtk += 2
-		elif mutationBonus == 1:
-			#This mutation raises Zilla's defense
-			message("I feel a mutation coming on! I'm so TOUGH! My belly's as strong as iron!", defs.cZilla)
-			player.fighter.baseDfn += 2
+		#Present the player with a choice of skills to increase.
+		mutationBonus = None
+		while mutationBonus == None: #Keep asking until a choice is made.
+			mutationBonus = menu("I feel a mutation coming on!\n",
+				["Imposing Weight (+2 Attack)",
+				"Iron Belly (+2 Defense)",
+				"Giantess Strength (+2 Damage)"], defs.ADVANCE_MENU_WIDTH, libtcod.white,
+				libtcod.darkest_flame, "Level Up")
+				
+			if mutationBonus == 0:
+				player.fighter.baseAtk += 2
+			elif mutationBonus == 1:
+				player.fighter.baseDfn += 2
+			elif mutationBonus == 2:
+				player.fighter.minDamage += 2
+				player.fighter.maxDamage += 2
 				
 #This function chooses one option from a list of chances, returning its index. The dice will land 
 #on some number between one and the sum of the chances.
@@ -1512,19 +1404,22 @@ def convertWeight(amount):
 #########################################################################################################
 # [RANDOM NUMBER GENERATION]                                                                            #
 #########################################################################################################
-	
+
 #This function is a more concise way of invoking the libtcod random function, for shortening
-#the function call. Calling the function without parameters flips a coin (returns either 0 or 1).
+#the function call. Calling the function without parameters flips a coin (returns either 0 or 1). This
+#shortened function will always default to using the zeroth random number stream, so for situations
+#where a certain stream needs to be specified, the entire random_get_int call will need to be made.
 def rnd(min = 0, max = 1):
 	return libtcod.random_get_int(0, min, max)
 	
-#This function returns a value that depends on laboratory level. The table specifies what value occurs after each level, default is zero.
+#This function returns a value that depends on the current game level. The table specifies what value
+#occurs after each level, default is zero. 
 def fromLabLevel(table):
 	for (value, level) in reversed(table):
 		if dungeonLevel >= level:
 			return value
 	return 0
-	
+
 def getEquippedInSlot(slot):
 	for obj in inventory:
 		if obj.equipment and obj.equipment.slot == slot and obj.equipment.isWorn:
@@ -1541,20 +1436,71 @@ def getAllEquipped(obj):
 	else:
 		return [] #Non-player objects do not have equipment.
 	
+#This function generates a monster using the object data loaded through parsing. It takes the
+#generation step by step, putting together components as necessary, and finally returns the entire
+#new Object.
+def generateMonster(x, y):
+	monsterChances = {}
+	monsterChances["tierZero"] = 80
+	monsterChances["tierOne"] = fromLabLevel([[15,3], [30,5], [60,7]])
+	tierChoice = chooseFromDict(monsterChances)
+	
+	if tierChoice == "tierZero":
+		monsterChoice = script.selectFromList(loader.monstersTierZero)
+	elif tierChoice == "tierOne":
+		monsterChoice = script.selectFromList(loader.monstersTierOne)
+		
+	chosenData = loader.rawMonsterData[monsterChoice]
+		
+	#If the monster has a death effect defined in its data, it must be added to the object.
+	if 'deathEffect' in chosenData:
+		deathEffect = chosenData['deathEffect']
+	else:
+		deathEffect = monsterDeath
+						
+	fighterComponent = Fighter(hp = chosenData["hp"], aura = 0, atk = chosenData["atk"], 
+		dfn = chosenData["dfn"], minDamage = chosenData["min"], maxDamage = chosenData["max"], 
+		xp = chosenData["xp"], deathEffect = deathEffect)
+	aiComponent = BasicMonster()
+	return Object(x, y, chosenData["glyph"], chosenData["name"], chosenData["col"], chosenData["dsc"],
+		blocks = True, fighter = fighterComponent, ai = aiComponent)
+
 #This function generates an item using the object data loaded through parsing. It takes the generation
 #step by step, putting together components as necessary, and finally returns the entire new Object.	
 def generateItem(x, y):
 	itemChances = {"food": 50, "potion": 20, "suit": 15}
 	typeChoice = chooseFromDict(itemChances)
+	successfulChoose = False
 	
 	if typeChoice == "food":
-		itemChoice = script.selectFromList(loader.itemsFood)
-	if typeChoice == "potion":
-		itemChoice = script.selectFromList(loader.itemsPotions)
-	if typeChoice == "suit":
-		itemChoice = script.selectFromList(loader.itemsSuits)
+		while successfulChoose is not True:
+			itemChoice = script.selectFromList(loader.itemsFood)
+			chosenData = loader.rawItemData[itemChoice]
+			if rnd(1,6) <= chosenData["rarity"]:
+				print "Rarity check on " + itemChoice + " successful - generating item."
+				successfulChoose = True
+			else:
+				print "Rarity check on " + itemChoice + " unsuccessful - skipping item and looping."
 	
-	chosenData = loader.rawItemData[itemChoice]
+	if typeChoice == "potion":
+		while successfulChoose is not True:
+			itemChoice = script.selectFromList(loader.itemsPotions)
+			chosenData = loader.rawItemData[itemChoice]
+			if rnd(1,6) <= chosenData["rarity"]:
+				print "Rarity check on " + itemChoice + " successful - generating item."
+				successfulChoose = True
+			else:
+				print "Rarity check on " + itemChoice + " unsuccessful - skipping item and looping."
+				
+	if typeChoice == "suit":
+		while successfulChoose is not True:
+			itemChoice = script.selectFromList(loader.itemsSuits)
+			chosenData = loader.rawItemData[itemChoice]
+			if rnd(1,6) <= chosenData["rarity"]:
+				print "Rarity check on " + itemChoice + " successful - generating item."
+				successfulChoose = True
+			else:
+				print "Rarity check on " + itemChoice + " unsuccessful - skipping item and looping."
 			
 	#First, we need to read chosenData's kind and assign it the proper glyph.
 	if chosenData["kind"] == "food":

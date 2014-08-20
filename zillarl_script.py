@@ -9,6 +9,10 @@
 
 import libtcodpy as libtcod
 
+#Descriptions
+DESC_DEFAULT = "This object has no description."
+DESC_ZILLA = "One of our finest test subjects. She was granted extraordinary strength and shapeshifting abilities by our genetic experimentation."
+
 #NOISES are short strings used as verbs. They provide variation to Zilla's actions.  
 attackNoises = ["bumps", "bashes", "whacks", "thumps", "squishes", "squashes", "smacks"]
 shrinkNoises = ["shrinks", "dwindles", "shrivels", "melts"]
